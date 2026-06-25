@@ -1,0 +1,64 @@
+project: Taobao Grab Bot
+headless: false
+max_retries: 8
+retry_wait_seconds: 0.3
+
+# 浏览器设置
+browser:
+  # 浏览器类型: auto / chrome / edge
+  # auto = 自动检测（优先 Edge，因为 Windows 自带）
+  type: auto
+  # 用户数据目录（留空则不复用，每次需重新登录）
+  # Edge: C:\Users\你的用户名\AppData\Local\Microsoft\Edge\User Data
+  # Chrome: C:\Users\你的用户名\AppData\Local\Google\Chrome\User Data
+  # 注意：路径中使用正斜杠或单引号，避免 YAML 转义问题
+  user_data_dir: ''
+
+# 商品设置
+product:
+  # 目标商品链接（必填，只需 id 参数即可）
+  # 例如: https://detail.tmall.com/item.htm?id=940544994399
+  url: "https://detail.tmall.com/item.htm?id=YOUR_ITEM_ID"
+  # SKU 规格关键词，按顺序匹配（大小写不敏感）
+  # 精确匹配，不会误选 "水洗椰树卡其色+裤子" 中的 "水洗椰树卡其色"
+  sku_keywords:
+    - "咖啡色"
+    - "2xl"
+  # 开抢时间，格式: YYYY-MM-DD HH:MM:SS（留空则立即开始）
+  # 设置后脚本会提前打开页面并选好规格，时间到直接点购买
+  start_time: ""
+
+# 购物车 / 下单
+cart:
+  auto_checkout: true
+
+# 登录
+login:
+  # 登录入口页（用于加载 Cookie）
+  login_url: "https://www.taobao.com"
+  # Cookie 保存路径（JSON 格式）
+  cookie_path: "state/cookies.json"
+
+# 按钮关键词（按优先级排列）
+keywords:
+  buy_now:
+    - "领券购买"       # 天猫当前按钮文字
+    - "立即购买"
+    - "马上抢"
+    - "立刻购买"
+    - "立即下单"
+    - "确认订单"
+  confirm:
+    - "立即支付"       # 天猫支付按钮文字
+    - "提交订单"
+    - "同意协议并付款"
+    - "确认"
+    - "下一步"
+
+# CSS 选择器兜底
+selector:
+  buy_button_selectors:
+    - "button.primary"  # 天猫当前购买按钮 class
+    - "a.J_LinkBuy"
+    - "button.J_LinkBuy"
+    - "#J_LinkBuy"

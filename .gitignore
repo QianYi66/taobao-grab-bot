@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# 配置文件（含个人登录信息）
+config.yaml
+
+# 状态文件
+state/
+cookies.json
+
+# 截图和日志
+screenshots/
+logs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+.claude/

@@ -1,4 +1,9 @@
-"""配置加载器 —— 自动填充默认值，保证下游代码安全。"""
+"""
+配置加载器
+==========
+加载 config.yaml 配置文件，自动填充默认值，保证下游代码安全。
+支持通过 -c 参数指定自定义配置文件路径。
+"""
 from __future__ import annotations
 
 from pathlib import Path

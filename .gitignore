@@ -1,3 +1,5 @@
+# 淘宝抢购机器人 - Git 忽略规则
+
 # Python
 __pycache__/
 *.pyc
@@ -5,14 +7,14 @@ __pycache__/
 .venv/
 venv/
 
-# 配置文件（含个人登录信息）
+# 配置文件（含个人登录信息，不提交）
 config.yaml
 
-# 状态文件
+# 状态文件（Cookie 存储）
 state/
 cookies.json
 
-# 截图和日志
+# 运行时生成的截图和日志
 screenshots/
 logs/
 
@@ -20,7 +22,9 @@ logs/
 .vscode/
 .idea/
 
+# Claude 本地配置
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db
-.claude/

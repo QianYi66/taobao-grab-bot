@@ -16,6 +16,18 @@
 - **失败重试**：可配置重试次数，登录过期自动提示
 - **预检模式**：dry-run 只检查元素，不下单
 
+## 📁 项目结构
+
+| 文件 | 说明 |
+|------|------|
+| `bot.py` | 主程序：浏览器管理、SKU 选择、购买下单、截图、重试等核心逻辑 |
+| `config_loader.py` | 配置加载器：读取 config.yaml 并自动填充默认值 |
+| `config.example.yaml` | 配置模板：复制为 config.yaml 后编辑 |
+| `requirements.txt` | Python 依赖清单 |
+| `LICENSE` | MIT 开源许可证 |
+| `README.md` | 项目说明文档 |
+| `.gitignore` | Git 忽略规则（不提交配置、截图、日志等） |
+
 ## 📦 环境要求
 
 - Python 3.8+

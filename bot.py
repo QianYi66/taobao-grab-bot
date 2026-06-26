@@ -267,20 +267,19 @@ class TaobaoGrabber:
                 self._using_user_data_dir = True
                 _info("成功使用 Edge 配置目录")
             except Exception as e:
-                # 被锁定 → 提示用户关闭 Edge，不再暴力杀进程（会破坏登录态）
-                _warn(f"配置目录被锁定，请关闭所有 Edge 窗口后按 Enter 重试")
-                print()
-                print("=" * 52)
-                print("  请关闭所有 Edge 浏览器窗口")
-                print("  关闭后回到终端按 Enter 继续")
-                print("=" * 52)
-                input(">>> 按 Enter ...")
+                # 被锁定 → 自动关闭 Edge 后台进程
+                _warn(f"配置目录被锁定，正在关闭 Edge 后台进程...")
+                import subprocess
+                subprocess.run(["taskkill", "/F", "/IM", "msedge.exe"],
+                               capture_output=True, timeout=5)
+                import time as _t
+                _t.sleep(2)
                 try:
                     opts = _make_opts()
                     opts.add_argument(f"--user-data-dir={profile}")
                     self.driver = _start_edge(opts)
                     self._using_user_data_dir = True
-                    _info("成功使用 Edge 配置目录")
+                    _info("关闭 Edge 后成功使用配置目录")
                 except Exception as e2:
                     # 彻底失败 → 回退到临时目录
                     _warn(f"仍无法使用配置目录，回退到临时目录: {e2}")
@@ -568,7 +567,7 @@ class TaobaoGrabber:
         if not cookie_path.exists():
             return
 
-        # 先访问淘宝域名，确保能加载 .taobao.com 的 cookie
+        # 访问淘宝域名，确保能加载 cookie
         self.driver.get(self.cfg["login"]["login_url"])
         try:
             WebDriverWait(self.driver, 3).until(
@@ -586,28 +585,12 @@ class TaobaoGrabber:
             try:
                 self.driver.add_cookie(c)
             except Exception:
-                # domain 不匹配时，尝试替换为当前域名
+                # domain 不匹配时尝试当前域名
                 try:
                     c["domain"] = ".tmall.com"
                     self.driver.add_cookie(c)
                 except Exception as e:
                     _warn(f"添加 cookie 失败: {e}")
-
-        # 补充：访问天猫域名，加载天猫相关 cookie
-        self.driver.get("https://www.tmall.com")
-        try:
-            WebDriverWait(self.driver, 3).until(
-                lambda d: d.execute_script("return document.readyState") == "complete"
-            )
-        except Exception:
-            pass
-        for c in cookies:
-            if "domain" not in c:
-                c["domain"] = ".tmall.com"
-            try:
-                self.driver.add_cookie(c)
-            except Exception:
-                pass
 
         _info("已加载 Cookie 文件")
 

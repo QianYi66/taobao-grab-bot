@@ -25,7 +25,7 @@ def load_config(path: str = "config.yaml") -> Dict[str, Any]:
     # --- top-level ---
     cfg.setdefault("headless", False)
     cfg.setdefault("max_retries", 8)
-    cfg.setdefault("retry_wait_seconds", 0.3)
+    cfg.setdefault("retry_wait_seconds", 1.5)
 
     # --- browser ---
     cfg.setdefault("browser", {})
@@ -51,14 +51,13 @@ def load_config(path: str = "config.yaml") -> Dict[str, Any]:
     # --- keywords ---
     cfg.setdefault("keywords", {})
     kw = cfg["keywords"]
-    kw.setdefault("buy_now", ["立即购买", "马上抢", "立刻购买", "立即下单", "确认订单"])
-    kw.setdefault("confirm", ["提交订单", "同意协议并付款", "确认", "下一步"])
+    kw.setdefault("buy_now", ["领券购买", "立即购买", "马上抢", "立刻购买", "立即下单", "确认订单"])
+    kw.setdefault("confirm", ["立即支付", "提交订单", "同意协议并付款", "确认", "下一步"])
 
     # --- selector ---
     cfg.setdefault("selector", {})
     cfg["selector"].setdefault("buy_button_selectors", [
-        "a.J_LinkBuy", "button.J_LinkBuy", "#J_LinkBuy",
-        "a[href*='buy']", "button[class*='buy']",
+        "button.primary", "a.J_LinkBuy", "button.J_LinkBuy", "#J_LinkBuy",
     ])
 
     return cfg

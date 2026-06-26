@@ -240,10 +240,15 @@ class TaobaoGrabber:
         import os, platform
         _cache = _P(os.path.expanduser('~')) / '.cache' / 'selenium' / 'msedgedriver'
         if _cache.exists():
-            # 自动匹配架构：win64 / arm64 / mac-arm64 / mac-x64
-            _arch = 'win64' if platform.machine().endswith('64') else 'arm64'
+            _machine = platform.machine().lower()
             if sys.platform == 'darwin':
-                _arch = 'mac-arm64' if platform.machine() == 'arm64' else 'mac-x64'
+                _arch = 'mac-arm64' if _machine == 'arm64' else 'mac-x64'
+            elif _machine.endswith('64') or _machine.startswith('x86_64'):
+                _arch = 'win64'
+            elif _machine.startswith('aarch64') or _machine.startswith('arm'):
+                _arch = 'arm64'
+            else:
+                _arch = 'win32'
             _versions = sorted(_cache.glob(f'{_arch}/*'), reverse=True)
             _exe = 'msedgedriver.exe' if sys.platform == 'win32' else 'msedgedriver'
             _driver_path = str(_versions[0] / _exe) if _versions and _versions[0].exists() else None
@@ -341,47 +346,6 @@ class TaobaoGrabber:
             self.driver = None
 
     # ------------------------------------------------------------------
-    # 元素操作
-    # ------------------------------------------------------------------
-
-    def _find(self, by: str, value: str, timeout: float = 1):
-        try:
-            return WebDriverWait(self.driver, timeout).until(
-                EC.element_to_be_clickable((by, value))
-            )
-        except (TimeoutException, WebDriverException):
-            return None
-
-    def _click_text(self, texts: List[str], timeout: float = 0.5) -> bool:
-        for txt in texts:
-            xpath = f'//*[contains(normalize-space(text()),"{txt}")]'
-            el = self._find(By.XPATH, xpath, timeout=timeout)
-            if not el:
-                continue
-            try:
-                el.click()
-                return True
-            except ElementClickInterceptedException:
-                self.driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-                self.driver.execute_script("arguments[0].click();", el)
-                return True
-            except StaleElementReferenceException:
-                continue
-        return False
-
-    def _click_css(self, selectors: List[str], timeout: float = 0.3) -> bool:
-        for sel in selectors:
-            el = self._find(By.CSS_SELECTOR, sel, timeout=timeout)
-            if el:
-                try:
-                    el.click()
-                    return True
-                except Exception:
-                    self.driver.execute_script("arguments[0].click();", el)
-                    return True
-        return False
-
-    # ------------------------------------------------------------------
     # SKU 选择
     # ------------------------------------------------------------------
 
@@ -391,8 +355,7 @@ class TaobaoGrabber:
             return
 
         # 一次 JS 调用处理所有关键词，避免多次 execute_script 开销（大小写不敏感）
-        # 转义双引号防止 XPath 注入
-        kw_list = json.dumps([str(k).strip().replace('"', '\\"') for k in keywords if str(k).strip()])
+        kw_list = json.dumps([str(k).strip() for k in keywords if str(k).strip()])
         js_all = f"""
         var keywords = {kw_list};
         var clicked = [];
@@ -421,10 +384,12 @@ class TaobaoGrabber:
             }}
             if (found) {{ clicked.push(kw); continue; }}
 
-            // 3. 兜底 contains
-            var xpath = '//*[contains(@title,"' + kw + '") or contains(text(),"' + kw + '")]';
-            var result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
-            if (result.singleNodeValue) {{ result.singleNodeValue.click(); clicked.push(kw); }}
+            // 3. 兜底 contains（用单引号包裹关键词，防双引号注入）
+            try {{
+                var xpath = "//*[contains(@title,'" + kw.replace(/'/g, "\\'") + "') or contains(text(),'" + kw.replace(/'/g, "\\'") + "')]";
+                var result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                if (result.singleNodeValue) {{ result.singleNodeValue.click(); clicked.push(kw); }}
+            }} catch(e) {{}}
         }}
         return clicked;
         """
@@ -501,16 +466,14 @@ class TaobaoGrabber:
         if not target_str:
             return
 
-        from datetime import timezone, timedelta
+        from datetime import timezone
         target = datetime.strptime(target_str, "%Y-%m-%d %H:%M:%S")
-        # 假设用户配置的是本地时间（中国 UTC+8），转为 aware datetime
-        local_tz = timezone(timedelta(hours=8))
+        # 使用系统本地时区
+        local_tz = datetime.now().astimezone().tzinfo
         target = target.replace(tzinfo=local_tz)
         _info(f"目标时间: {target}")
 
         while True:
-            from datetime import timezone, timedelta
-            local_tz = timezone(timedelta(hours=8))
             now = datetime.now(tz=local_tz)
             remaining = (target - now).total_seconds()
             if remaining <= 0:
@@ -567,7 +530,10 @@ class TaobaoGrabber:
         if not cookie_path.exists():
             return
 
-        # 访问淘宝域名，确保能加载 cookie
+        with cookie_path.open("r", encoding="utf-8") as f:
+            cookies = json.load(f)
+
+        # 1. 访问淘宝，加载 .taobao.com 域的 cookie
         self.driver.get(self.cfg["login"]["login_url"])
         try:
             WebDriverWait(self.driver, 3).until(
@@ -575,22 +541,28 @@ class TaobaoGrabber:
             )
         except Exception:
             pass
-
-        with cookie_path.open("r", encoding="utf-8") as f:
-            cookies = json.load(f)
-
         for c in cookies:
             if "domain" not in c:
                 c["domain"] = ".taobao.com"
             try:
                 self.driver.add_cookie(c)
             except Exception:
-                # domain 不匹配时尝试当前域名
-                try:
-                    c["domain"] = ".tmall.com"
-                    self.driver.add_cookie(c)
-                except Exception as e:
-                    _warn(f"添加 cookie 失败: {e}")
+                pass
+
+        # 2. 访问天猫，加载 .tmall.com 域的 cookie
+        self.driver.get("https://www.tmall.com")
+        try:
+            WebDriverWait(self.driver, 3).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+        except Exception:
+            pass
+        for c in cookies:
+            c["domain"] = ".tmall.com"
+            try:
+                self.driver.add_cookie(c)
+            except Exception:
+                pass
 
         _info("已加载 Cookie 文件")
 
@@ -650,6 +622,7 @@ class TaobaoGrabber:
                 _info(f"重新打开商品页 -> {self.driver.current_url}")
 
             # 提前选好规格（倒计时前就选好，开抢时直接点购买）
+            self._wait_captcha()
             self._select_sku()
 
             # 等待开抢
@@ -672,6 +645,7 @@ class TaobaoGrabber:
                             )
                         except Exception:
                             pass
+                        self._wait_captcha()
                         # 刷新后重新选规格
                         self._select_sku()
 

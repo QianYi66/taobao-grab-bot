@@ -780,11 +780,13 @@ class TaobaoGrabber:
 
                     # 等待跳转到支付页（最多 10 秒）
                     _info("等待跳转...")
+                    is_payment = False
                     for _w in range(100):
                         time.sleep(0.1)
                         cur = self.driver.current_url
                         if "cashier" in cur or "pay" in cur or "alipay" in cur:
                             _info(f"[OK] 已跳转到支付页面！")
+                            is_payment = True
                             break
                     else:
                         _warn(f"未跳转到支付页，当前: {self.driver.current_url}")
@@ -799,13 +801,18 @@ class TaobaoGrabber:
                     time.sleep(1)
                     self._screenshot("payment")
 
-                    print()
-                    print("=" * 52)
-                    print("  请在浏览器中完成支付")
-                    print("  完成后回到终端按 Enter 关闭")
-                    print("=" * 52)
-                    input(">>> 按 Enter 关闭浏览器 ...")
-                    return
+                    # 到了支付页就结束，不再重试
+                    if is_payment:
+                        print()
+                        print("=" * 52)
+                        print("  请在浏览器中完成支付")
+                        print("  完成后回到终端按 Enter 关闭")
+                        print("=" * 52)
+                        try:
+                            input(">>> 按 Enter 关闭浏览器 ...")
+                        except EOFError:
+                            pass
+                        return
                 except FatalError:
                     # 致命错误，直接抛出不重试
                     raise

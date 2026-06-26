@@ -1,4 +1,5 @@
 # 淘宝抢购机器人 - Python 依赖
 selenium>=4.20.0
-undetected-chromedriver>=3.5.5
 PyYAML>=6.0
+# undetected-chromedriver 仅在使用 Chrome 时需要（Edge 不需要）
+# undetected-chromedriver>=3.5.5

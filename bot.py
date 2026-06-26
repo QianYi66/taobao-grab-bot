@@ -55,6 +55,8 @@ logger = logging.getLogger("taobao_grab")
 
 def _setup_logging(log_dir: str = "logs") -> None:
     """配置日志：同时输出到终端和文件。"""
+    if logger.handlers:
+        return  # 防止重复添加 handler
     logger.setLevel(logging.DEBUG)
 
     # 终端输出
@@ -233,12 +235,20 @@ class TaobaoGrabber:
                 opts.add_argument("--headless=new")
             return opts
 
-        # 驱动路径
+        # 驱动路径（跨平台）
         from pathlib import Path as _P
-        import os
+        import os, platform
         _cache = _P(os.path.expanduser('~')) / '.cache' / 'selenium' / 'msedgedriver'
-        _versions = sorted(_cache.glob('win64/*'), reverse=True) if _cache.exists() else []
-        _driver_path = str(_versions[0] / 'msedgedriver.exe') if _versions and _versions[0].exists() else None
+        if _cache.exists():
+            # 自动匹配架构：win64 / arm64 / mac-arm64 / mac-x64
+            _arch = 'win64' if platform.machine().endswith('64') else 'arm64'
+            if sys.platform == 'darwin':
+                _arch = 'mac-arm64' if platform.machine() == 'arm64' else 'mac-x64'
+            _versions = sorted(_cache.glob(f'{_arch}/*'), reverse=True)
+            _exe = 'msedgedriver.exe' if sys.platform == 'win32' else 'msedgedriver'
+            _driver_path = str(_versions[0] / _exe) if _versions and _versions[0].exists() else None
+        else:
+            _driver_path = None
 
         def _start_edge(opts):
             if _driver_path and _P(_driver_path).exists():
@@ -305,6 +315,7 @@ class TaobaoGrabber:
         profile = browser_cfg.get("user_data_dir", "")
         if profile:
             opts.add_argument(f"--user-data-dir={profile}")
+            self._using_user_data_dir = True
 
         opts.add_argument("--disable-blink-features=AutomationControlled")
         opts.add_argument("--no-sandbox")
@@ -329,19 +340,6 @@ class TaobaoGrabber:
             except Exception:
                 pass
             self.driver = None
-
-    @staticmethod
-    def _is_edge_running() -> bool:
-        """检测 Edge 是否正在运行（包括后台进程，它们也会锁定用户数据目录）。"""
-        import subprocess
-        try:
-            result = subprocess.run(
-                ["tasklist", "/FI", "IMAGENAME eq msedge.exe"],
-                capture_output=True, text=True, timeout=5
-            )
-            return "msedge.exe" in result.stdout
-        except Exception:
-            return False
 
     # ------------------------------------------------------------------
     # 元素操作
@@ -394,7 +392,8 @@ class TaobaoGrabber:
             return
 
         # 一次 JS 调用处理所有关键词，避免多次 execute_script 开销（大小写不敏感）
-        kw_list = json.dumps([str(k).strip() for k in keywords if str(k).strip()])
+        # 转义双引号防止 XPath 注入
+        kw_list = json.dumps([str(k).strip().replace('"', '\\"') for k in keywords if str(k).strip()])
         js_all = f"""
         var keywords = {kw_list};
         var clicked = [];
@@ -503,11 +502,18 @@ class TaobaoGrabber:
         if not target_str:
             return
 
+        from datetime import timezone, timedelta
         target = datetime.strptime(target_str, "%Y-%m-%d %H:%M:%S")
+        # 假设用户配置的是本地时间（中国 UTC+8），转为 aware datetime
+        local_tz = timezone(timedelta(hours=8))
+        target = target.replace(tzinfo=local_tz)
         _info(f"目标时间: {target}")
 
         while True:
-            remaining = (target - datetime.now()).total_seconds()
+            from datetime import timezone, timedelta
+            local_tz = timezone(timedelta(hours=8))
+            now = datetime.now(tz=local_tz)
+            remaining = (target - now).total_seconds()
             if remaining <= 0:
                 break
             if remaining > 2:
@@ -516,7 +522,7 @@ class TaobaoGrabber:
                 time.sleep(0.5)
             else:
                 # 最后 2 秒：用短 sleep 代替 busy-wait，降低 CPU 占用
-                while (target - datetime.now()).total_seconds() > 0.001:
+                while (target - datetime.now(tz=local_tz)).total_seconds() > 0.001:
                     time.sleep(0.001)
                 break
 
@@ -562,6 +568,7 @@ class TaobaoGrabber:
         if not cookie_path.exists():
             return
 
+        # 先访问淘宝域名，确保能加载 .taobao.com 的 cookie
         self.driver.get(self.cfg["login"]["login_url"])
         try:
             WebDriverWait(self.driver, 3).until(
@@ -574,13 +581,33 @@ class TaobaoGrabber:
             cookies = json.load(f)
 
         for c in cookies:
-            # 确保 domain 字段存在
             if "domain" not in c:
                 c["domain"] = ".taobao.com"
             try:
                 self.driver.add_cookie(c)
-            except Exception as e:
-                _warn(f"添加 cookie 失败: {e}")
+            except Exception:
+                # domain 不匹配时，尝试替换为当前域名
+                try:
+                    c["domain"] = ".tmall.com"
+                    self.driver.add_cookie(c)
+                except Exception as e:
+                    _warn(f"添加 cookie 失败: {e}")
+
+        # 补充：访问天猫域名，加载天猫相关 cookie
+        self.driver.get("https://www.tmall.com")
+        try:
+            WebDriverWait(self.driver, 3).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+        except Exception:
+            pass
+        for c in cookies:
+            if "domain" not in c:
+                c["domain"] = ".tmall.com"
+            try:
+                self.driver.add_cookie(c)
+            except Exception:
+                pass
 
         _info("已加载 Cookie 文件")
 

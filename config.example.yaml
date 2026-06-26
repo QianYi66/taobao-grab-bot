@@ -1,7 +1,7 @@
 project: Taobao Grab Bot
 headless: false
 max_retries: 8
-retry_wait_seconds: 0.3
+retry_wait_seconds: 1.5
 
 # 浏览器设置
 browser:
